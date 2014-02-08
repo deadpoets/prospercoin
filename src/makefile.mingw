@@ -21,16 +21,26 @@ USE_UPNP:=-
 USE_IPV6:=1
 
 DEPSDIR?=/usr/local
-BOOST_SUFFIX?=-mgw46-mt-sd-1_52
+BOOST_SUFFIX?=-mgw48-mt-sd-1_55
 
 INCLUDEPATHS= \
  -I"$(CURDIR)" \
+ -I"c:/coin/dept/boost_1_55_0" \
+ -I"c:/coin/dept/boost_1_55_0/stage/lib" \
+ -I"c:/coin/dept/boost_1_55_0/boost" \
+ -I"c:/coin/dept/boost_1_55_0/boost/algorithm" \
+ -I"c:/coin/dept/boost_1_55_0/boost/algorithm/string" \
+ -I"c:/coin/dept/db-4.8.30.NC-mgw/build_unix" \
+ -I"c:/coin/dept/openssl-1.0.1e/include" \
+ -I"c:/coin/dept/miniupnpc" \
  -I"$(DEPSDIR)/include"
 
 LIBPATHS= \
  -L"$(CURDIR)/leveldb" \
+  -L"c:/coin/dept/boost_1_55_0/stage/lib" \
+ -L"c:/coin/dept/db-4.8.30.NC-mgw/build_unix" \
+ -L"c:/coin/dept/openssl-1.0.1e" \
  -L"$(DEPSDIR)/lib"
-
 LIBS= \
  -l leveldb \
  -l memenv \
@@ -43,7 +53,7 @@ LIBS= \
  -l ssl \
  -l crypto
 
-DEFS=-D_MT -DWIN32 -D_WINDOWS -DBOOST_THREAD_USE_LIB -DBOOST_SPIRIT_THREADSAFE
+DEFS=-D_MT -DWIN32 -D_WINDOWS -DBOOST_THREAD_USE_LIB -DBOOST_SPIRIT_THREADSAFE 
 DEBUGFLAGS=-g
 CFLAGS=-mthreads -O2 -w -Wall -Wextra -Wformat -Wformat-security -Wno-unused-parameter $(DEBUGFLAGS) $(DEFS) $(INCLUDEPATHS)
 # enable: ASLR, DEP and large address aware
@@ -108,10 +118,10 @@ OBJS_SSE2= obj/scrypt-sse2.o
 OBJS += $(OBJS_SSE2)
 endif
 
-all: litecoind.exe
+all: prospercoind.exe
 
-test check: test_litecoin.exe FORCE
-	test_litecoin.exe
+test check: test_prospercoin.exe FORCE
+	test_prospercoin.exe
 
 #
 # LevelDB support
@@ -128,7 +138,7 @@ obj/%-sse2.o: %-sse2.cpp
 obj/%.o: %.cpp $(HEADERS)
 	$(CXX) -c $(CFLAGS) -o $@ $<
 
-litecoind.exe: $(OBJS:obj/%=obj/%)
+prospercoind.exe: $(OBJS:obj/%=obj/%)
 	$(CXX) $(CFLAGS) $(LDFLAGS) -o $@ $(LIBPATHS) $^ $(LIBS)
 
 TESTOBJS := $(patsubst test/%.cpp,obj-test/%.o,$(wildcard test/*.cpp))
@@ -136,11 +146,11 @@ TESTOBJS := $(patsubst test/%.cpp,obj-test/%.o,$(wildcard test/*.cpp))
 obj-test/%.o: test/%.cpp $(HEADERS)
 	$(CXX) -c $(TESTDEFS) $(CFLAGS) -o $@ $<
 
-test_litecoin.exe: $(TESTOBJS) $(filter-out obj/init.o,$(OBJS:obj/%=obj/%))
+test_prospercoin.exe: $(TESTOBJS) $(filter-out obj/init.o,$(OBJS:obj/%=obj/%))
 	$(CXX) $(CFLAGS) $(LDFLAGS) -o $@ $(LIBPATHS) $^ -lboost_unit_test_framework$(BOOST_SUFFIX) $(LIBS)
 
 clean:
-	rm -f litecoind.exe test_litecoin.exe
+	rm -f prospercoind.exe test_prospercoin.exe
 	rm -f obj/*
 	rm -f obj-test/*
 	cd leveldb && $(MAKE) TARGET_OS=NATIVE_WINDOWS clean && cd ..

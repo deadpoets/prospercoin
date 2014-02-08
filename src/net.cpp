@@ -135,7 +135,7 @@ CAddress GetLocalAddress(const CNetAddr *paddrPeer)
 bool RecvLine(SOCKET hSocket, string& strLine)
 {
     strLine = "";
-    loop
+    while (true)
     {
         char c;
         int nBytes = recv(hSocket, &c, 1, 0);
@@ -307,7 +307,7 @@ bool GetMyExternalIP2(const CService& addrConnect, const char* pszGet, const cha
     {
         if (strLine.empty()) // HTTP response is separated from headers by blank line
         {
-            loop
+            while (true)
             {
                 if (!RecvLine(hSocket, strLine))
                 {
@@ -751,7 +751,7 @@ static list<CNode*> vNodesDisconnected;
 void ThreadSocketHandler()
 {
     unsigned int nPrevNodeCount = 0;
-    loop
+    while (true)
     {
         //
         // Disconnect nodes
@@ -1112,10 +1112,10 @@ void ThreadMapPort()
             }
         }
 
-        string strDesc = "Litecoin " + FormatFullVersion();
+        string strDesc = "Prospercoin " + FormatFullVersion();
 
         try {
-            loop {
+            while (true) {
 #ifndef UPNPDISCOVER_SUCCESS
                 /* miniupnpc 1.5 */
                 r = UPNP_AddPortMapping(urls.controlURL, data.first.servicetype,
@@ -1192,17 +1192,14 @@ void MapPort(bool)
 // The first name is used as information source for addrman.
 // The second name should resolve to a list of seed addresses.
 static const char *strMainNetDNSSeed[][2] = {
-    {"litecointools.com", "dnsseed.litecointools.com"},
-    {"litecoinpool.org", "dnsseed.litecoinpool.org"},
-    {"xurious.com", "dnsseed.ltc.xurious.com"},
-    {"koin-project.com", "dnsseed.koin-project.com"},
-    {"weminemnc.com", "dnsseed.weminemnc.com"},
+    {"seed", "seed.inmean.com"},
+    {"seed2", "seed.khmer.biz"},
     {NULL, NULL}
 };
 
 static const char *strTestNetDNSSeed[][2] = {
-    {"litecointools.com", "testnet-seed.litecointools.com"},
-    {"weminemnc.com", "testnet-seed.weminemnc.com"},
+    {"seed", "seedtest.inmean.com"},
+    {"seed2", "seed2.khmer.biz"},
     {NULL, NULL}
 };
 
@@ -1380,7 +1377,7 @@ void ThreadOpenConnections()
 
     // Initiate network connections
     int64 nStart = GetTime();
-    loop
+    while (true)
     {
         ProcessOneShot();
 
@@ -1431,7 +1428,7 @@ void ThreadOpenConnections()
         int64 nANow = GetAdjustedTime();
 
         int nTries = 0;
-        loop
+        while (true)
         {
             // use an nUnkBias between 10 (no outgoing connections) and 90 (8 outgoing connections)
             CAddress addr = addrman.Select(10 + min(nOutbound,8)*10);
@@ -1758,7 +1755,7 @@ bool BindListenPort(const CService &addrBind, string& strError)
     {
         int nErr = WSAGetLastError();
         if (nErr == WSAEADDRINUSE)
-            strError = strprintf(_("Unable to bind to %s on this computer. Litecoin is probably already running."), addrBind.ToString().c_str());
+            strError = strprintf(_("Unable to bind to %s on this computer. Prospercoin is probably already running."), addrBind.ToString().c_str());
         else
             strError = strprintf(_("Unable to bind to %s on this computer (bind returned error %d, %s)"), addrBind.ToString().c_str(), nErr, strerror(nErr));
         printf("%s\n", strError.c_str());

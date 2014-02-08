@@ -31,8 +31,8 @@ CTxMemPool mempool;
 unsigned int nTransactionsUpdated = 0;
 
 map<uint256, CBlockIndex*> mapBlockIndex;
-uint256 hashGenesisBlock("0x12a765e31ffd4059bada1e25190f6e98c99d9714d334efa41a195a7e7e04bfe2");
-static CBigNum bnProofOfWorkLimit(~uint256(0) >> 20); // Litecoin: starting difficulty is 1 / 2^12
+uint256 hashGenesisBlock("0xefcc08f682f47a64271f0c39504e6ebd3ae9811c5e68bda52ad1d949f0513312");
+static CBigNum bnProofOfWorkLimit(~uint256(0) >> 20); // Prospercoin: starting difficulty is 1 / 2^12
 CBlockIndex* pindexGenesisBlock = NULL;
 int nBestHeight = -1;
 uint256 nBestChainWork = 0;
@@ -64,7 +64,7 @@ map<uint256, set<uint256> > mapOrphanTransactionsByPrev;
 // Constant stuff for coinbase transactions we create:
 CScript COINBASE_FLAGS;
 
-const string strMessageMagic = "Litecoin Signed Message:\n";
+const string strMessageMagic = "Prospercoin Signed Message:\n";
 
 double dHashesPerSec = 0.0;
 int64 nHPSTimerStart = 0;
@@ -355,7 +355,7 @@ unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans)
 
 bool CTxOut::IsDust() const
 {
-    // Litecoin: IsDust() detection disabled, allows any valid dust to be relayed.
+    // Prospercoin: IsDust() detection disabled, allows any valid dust to be relayed.
     // The fees imposed on each dust txo is considered sufficient spam deterrant. 
     return false;
 }
@@ -1060,20 +1060,41 @@ uint256 static GetOrphanRoot(const CBlockHeader* pblock)
         pblock = mapOrphanBlocks[pblock->hashPrevBlock];
     return pblock->GetHash();
 }
-
+int64 mod_floor(int x, int y) {
+    int r = x%y;
+    if ((r!=0) && ((r<0) != (y<0))) { r += y; }
+    return r;
+}
 int64 static GetBlockValue(int nHeight, int64 nFees)
 {
-    int64 nSubsidy = 50 * COIN;
-
-    // Subsidy is cut in half every 840000 blocks, which will occur approximately every 4 years
-    nSubsidy >>= (nHeight / 840000); // Litecoin: 840k blocks in ~4 years
-
+    int64 nSubsidy = 10 * COIN;
+	int64 nRemain = 0;
+	
+	nRemain = mod_floor(nHeight, 21600); // Every month
+	
+	// Promotion day, one whole day of bonus
+	// Happen once a month
+	
+	if (nRemain < 721)
+	{
+		int dayRemain = 0;
+		dayRemain = mod_floor(nRemain, 30);
+		nSubsidy = nSubsidy + (10 + dayRemain) * COIN;
+	}
+	
+	if (mod_floor(nHeight, 100) != 0)
+	{
+		// halved every 2 years, including the bonus too
+		nSubsidy >>= (nHeight / 518400);
+	}
+	
     return nSubsidy + nFees;
 }
 
-static const int64 nTargetTimespan = 3.5 * 24 * 60 * 60; // Litecoin: 3.5 days
-static const int64 nTargetSpacing = 2.5 * 60; // Litecoin: 2.5 minutes
+static const int64 nTargetTimespan = 60 * 60; // Navyriya: 1 Hour
+static const int64 nTargetSpacing = 2 * 60; // Navyriya: 2 minutes
 static const int64 nInterval = nTargetTimespan / nTargetSpacing;
+
 
 //
 // minimum amount of work that could possibly be required nTime after
@@ -1100,7 +1121,7 @@ unsigned int ComputeMinWork(unsigned int nBase, int64 nTime)
     return bnResult.GetCompact();
 }
 
-unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
+unsigned int static GetNextWorkRequired_V1(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
 {
     unsigned int nProofOfWorkLimit = bnProofOfWorkLimit.GetCompact();
 
@@ -1169,6 +1190,92 @@ unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBl
     return bnNew.GetCompact();
 }
 
+unsigned int static KimotoGravityWell(const CBlockIndex* pindexLast, const CBlockHeader *pblock, uint64 TargetBlocksSpacingSeconds, uint64 PastBlocksMin, uint64 PastBlocksMax) {
+        /* current difficulty formula, megacoin - kimoto gravity well */
+        const CBlockIndex  *BlockLastSolved                                = pindexLast;
+        const CBlockIndex  *BlockReading                                = pindexLast;
+        const CBlockHeader *BlockCreating                                = pblock;
+                                                BlockCreating                                = BlockCreating;
+        uint64                                PastBlocksMass                                = 0;
+        int64                                PastRateActualSeconds                = 0;
+        int64                                PastRateTargetSeconds                = 0;
+        double                                PastRateAdjustmentRatio                = double(1);
+        CBigNum                                PastDifficultyAverage;
+        CBigNum                                PastDifficultyAveragePrev;
+        double                                EventHorizonDeviation;
+        double                                EventHorizonDeviationFast;
+        double                                EventHorizonDeviationSlow;
+        
+    if (BlockLastSolved == NULL || BlockLastSolved->nHeight == 0 || (uint64)BlockLastSolved->nHeight < PastBlocksMin) { return bnProofOfWorkLimit.GetCompact(); }
+        
+        for (unsigned int i = 1; BlockReading && BlockReading->nHeight > 0; i++) {
+                if (PastBlocksMax > 0 && i > PastBlocksMax) { break; }
+                PastBlocksMass++;
+                
+                if (i == 1)        { PastDifficultyAverage.SetCompact(BlockReading->nBits); }
+                else                { PastDifficultyAverage = ((CBigNum().SetCompact(BlockReading->nBits) - PastDifficultyAveragePrev) / i) + PastDifficultyAveragePrev; }
+                PastDifficultyAveragePrev = PastDifficultyAverage;
+                
+                PastRateActualSeconds                        = BlockLastSolved->GetBlockTime() - BlockReading->GetBlockTime();
+                PastRateTargetSeconds                        = TargetBlocksSpacingSeconds * PastBlocksMass;
+                PastRateAdjustmentRatio                        = double(1);
+                if (PastRateActualSeconds < 0) { PastRateActualSeconds = 0; }
+                if (PastRateActualSeconds != 0 && PastRateTargetSeconds != 0) {
+                PastRateAdjustmentRatio                        = double(PastRateTargetSeconds) / double(PastRateActualSeconds);
+                }
+                EventHorizonDeviation                        = 1 + (0.7084 * pow((double(PastBlocksMass)/double(28.2)), -1.228));
+                EventHorizonDeviationFast                = EventHorizonDeviation;
+                EventHorizonDeviationSlow                = 1 / EventHorizonDeviation;
+                
+                if (PastBlocksMass >= PastBlocksMin) {
+                        if ((PastRateAdjustmentRatio <= EventHorizonDeviationSlow) || (PastRateAdjustmentRatio >= EventHorizonDeviationFast)) { assert(BlockReading); break; }
+                }
+                if (BlockReading->pprev == NULL) { assert(BlockReading); break; }
+                BlockReading = BlockReading->pprev;
+        }
+        
+        CBigNum bnNew(PastDifficultyAverage);
+        if (PastRateActualSeconds != 0 && PastRateTargetSeconds != 0) {
+                bnNew *= PastRateActualSeconds;
+                bnNew /= PastRateTargetSeconds;
+        }
+    if (bnNew > bnProofOfWorkLimit) { bnNew = bnProofOfWorkLimit; }
+        
+    /// debug print
+    printf("Difficulty Retarget - Kimoto Gravity Well\n");
+    printf("PastRateAdjustmentRatio = %g\n", PastRateAdjustmentRatio);
+    printf("Before: %08x  %s\n", BlockLastSolved->nBits, CBigNum().SetCompact(BlockLastSolved->nBits).getuint256().ToString().c_str());
+    printf("After:  %08x  %s\n", bnNew.GetCompact(), bnNew.getuint256().ToString().c_str());
+        
+        return bnNew.GetCompact();
+}
+
+unsigned int static GetNextWorkRequired_V2(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
+{
+        static const int64        BlocksTargetSpacing                        = 2 * 60; // 2 Minutes
+        unsigned int                TimeDaySeconds                                = 60 * 60 * 24;
+        int64                       PastSecondsMin                                = TimeDaySeconds * 0.01;
+        int64                       PastSecondsMax                                = TimeDaySeconds * 0.14;
+        uint64                      PastBlocksMin                                = PastSecondsMin / BlocksTargetSpacing;
+        uint64                      PastBlocksMax                                = PastSecondsMax / BlocksTargetSpacing;        
+        
+        return KimotoGravityWell(pindexLast, pblock, BlocksTargetSpacing, PastBlocksMin, PastBlocksMax);
+}
+
+unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
+{
+        int DiffMode = 1;
+        if (fTestNet) {
+                if (pindexLast->nHeight+1 >= 50) { DiffMode = 2; }
+        }
+        else {
+                if (pindexLast->nHeight+1 >= 15000) { DiffMode = 2; }
+        }
+        
+        if                (DiffMode == 1) { return GetNextWorkRequired_V1(pindexLast, pblock); }
+        else if        (DiffMode == 2) { return GetNextWorkRequired_V2(pindexLast, pblock); }
+        return GetNextWorkRequired_V2(pindexLast, pblock);
+}
 bool CheckProofOfWork(uint256 hash, unsigned int nBits)
 {
     CBigNum bnTarget;
@@ -1296,16 +1403,6 @@ void CBlockHeader::UpdateTime(const CBlockIndex* pindexPrev)
     if (fTestNet)
         nBits = GetNextWorkRequired(pindexPrev, this);
 }
-
-
-
-
-
-
-
-
-
-
 
 const CTxOut &CTransaction::GetOutputFor(const CTxIn& input, CCoinsViewCache& view)
 {
@@ -2723,7 +2820,7 @@ bool LoadBlockIndex()
         pchMessageStart[1] = 0xc1;
         pchMessageStart[2] = 0xb7;
         pchMessageStart[3] = 0xdc;
-        hashGenesisBlock = uint256("0xf5ae71e26c74beacc88382716aced69cddf3dffff24f384e1808905e0188f68f");
+        hashGenesisBlock = uint256("0x4f20f0ce6d6fda09daf9f51aed6b25c35419655f951da66980677c590f5e4a5a");
     }
 
     //
@@ -2756,7 +2853,7 @@ bool InitBlockIndex() {
         //   vMerkleTree: 97ddfbbae6
 
         // Genesis block
-        const char* pszTimestamp = "NY Times 05/Oct/2011 Steve Jobs, Apple’s Visionary, Dies at 56";
+        const char* pszTimestamp = "Phnom Penh 01/19/2014 In Mean, MANICH Group";
         CTransaction txNew;
         txNew.vin.resize(1);
         txNew.vout.resize(1);
@@ -2768,13 +2865,13 @@ bool InitBlockIndex() {
         block.hashPrevBlock = 0;
         block.hashMerkleRoot = block.BuildMerkleTree();
         block.nVersion = 1;
-        block.nTime    = 1317972665;
+        block.nTime    = 1391004348;
         block.nBits    = 0x1e0ffff0;
-        block.nNonce   = 2084524493;
+        block.nNonce   = 2085568645;
 
         if (fTestNet)
         {
-            block.nTime    = 1317798646;
+            block.nTime    = 139013150;
             block.nNonce   = 385270584;
         }
 
@@ -2783,7 +2880,40 @@ bool InitBlockIndex() {
         printf("%s\n", hash.ToString().c_str());
         printf("%s\n", hashGenesisBlock.ToString().c_str());
         printf("%s\n", block.hashMerkleRoot.ToString().c_str());
-        assert(block.hashMerkleRoot == uint256("0x97ddfbbae6be97fd6cdf3e7ca13232a3afff2353e29badfab7f73011edd4ced9"));
+        assert(block.hashMerkleRoot == uint256("0xb733bd3d8dae8f98a474f5bfbdb3dd71b6dc68972ced53231221bc6d215ea38e"));
+
+        // If genesis block hash does not match, then generate new genesis hash.
+        if (false && block.GetHash() != hashGenesisBlock)
+        {
+            printf("Searching for genesis block...\n");
+            // This will figure out a valid hash and Nonce if you're
+            // creating a different genesis block:
+            uint256 hashTarget = CBigNum().SetCompact(block.nBits).getuint256();
+            uint256 thash;
+            char scratchpad[SCRYPT_SCRATCHPAD_SIZE];
+
+            while (true)
+            {
+                scrypt_1024_1_1_256_sp(BEGIN(block.nVersion), BEGIN(thash), scratchpad);
+                if (thash <= hashTarget)
+                    break;
+                if ((block.nNonce & 0xFFF) == 0)
+                {
+                    printf("nonce %08X: hash = %s (target = %s)\n", block.nNonce, thash.ToString().c_str(), hashTarget.ToString().c_str());
+                }
+                ++block.nNonce;
+                if (block.nNonce == 0)
+                {
+                    printf("NONCE WRAPPED, incrementing time\n");
+                    ++block.nTime;
+                }
+            }
+            printf("block.nTime = %u \n", block.nTime);
+            printf("block.nNonce = %u \n", block.nNonce);
+            printf("block.GetHash = %s\n", block.GetHash().ToString().c_str());
+        }
+
+
         block.print();
         assert(hash == hashGenesisBlock);
 
@@ -2954,11 +3084,6 @@ bool LoadExternalBlockFile(FILE* fileIn, CDiskBlockPos *dbp)
 
 
 
-
-
-
-
-
 //////////////////////////////////////////////////////////////////////////////
 //
 // CAlert
@@ -3056,7 +3181,7 @@ bool static AlreadyHave(const CInv& inv)
 // The message start string is designed to be unlikely to occur in normal data.
 // The characters are rarely used upper ASCII, not valid as UTF-8, and produce
 // a large 4-byte int at any alignment.
-unsigned char pchMessageStart[4] = { 0xfb, 0xc0, 0xb6, 0xdb }; // Litecoin: increase each by adding 2 to bitcoin's value.
+unsigned char pchMessageStart[4] = { 0xcb, 0xc2, 0xe6, 0xaf }; // Litecoin: increase each by adding 2 to bitcoin's value.
 
 
 void static ProcessGetData(CNode* pfrom)
@@ -4511,7 +4636,7 @@ bool CheckWork(CBlock* pblock, CWallet& wallet, CReserveKey& reservekey)
         return false;
 
     //// debug print
-    printf("LitecoinMiner:\n");
+    printf("ProspercoinMiner:\n");
     printf("proof-of-work found  \n  hash: %s  \ntarget: %s\n", hash.GetHex().c_str(), hashTarget.GetHex().c_str());
     pblock->print();
     printf("generated %s\n", FormatMoney(pblock->vtx[0].vout[0].nValue).c_str());
@@ -4520,7 +4645,7 @@ bool CheckWork(CBlock* pblock, CWallet& wallet, CReserveKey& reservekey)
     {
         LOCK(cs_main);
         if (pblock->hashPrevBlock != hashBestChain)
-            return error("LitecoinMiner : generated block is stale");
+            return error("ProspercoinMiner : generated block is stale");
 
         // Remove key from key pool
         reservekey.KeepKey();
@@ -4534,7 +4659,7 @@ bool CheckWork(CBlock* pblock, CWallet& wallet, CReserveKey& reservekey)
         // Process this block the same as if we had received it from another node
         CValidationState state;
         if (!ProcessBlock(state, NULL, pblock))
-            return error("LitecoinMiner : ProcessBlock, block not accepted");
+            return error("ProspercoinMiner : ProcessBlock, block not accepted");
     }
 
     return true;
@@ -4542,15 +4667,15 @@ bool CheckWork(CBlock* pblock, CWallet& wallet, CReserveKey& reservekey)
 
 void static LitecoinMiner(CWallet *pwallet)
 {
-    printf("LitecoinMiner started\n");
+    printf("ProspercoinMiner started\n");
     SetThreadPriority(THREAD_PRIORITY_LOWEST);
-    RenameThread("litecoin-miner");
+    RenameThread("prospercoin-miner");
 
     // Each thread has its own key and counter
     CReserveKey reservekey(pwallet);
     unsigned int nExtraNonce = 0;
 
-    try { loop {
+    try { while(true) {
         while (vNodes.empty())
             MilliSleep(1000);
 
@@ -4566,7 +4691,7 @@ void static LitecoinMiner(CWallet *pwallet)
         CBlock *pblock = &pblocktemplate->block;
         IncrementExtraNonce(pblock, pindexPrev, nExtraNonce);
 
-        printf("Running LitecoinMiner with %"PRIszu" transactions in block (%u bytes)\n", pblock->vtx.size(),
+        printf("Running ProspercoinMiner with %"PRIszu" transactions in block (%u bytes)\n", pblock->vtx.size(),
                ::GetSerializeSize(*pblock, SER_NETWORK, PROTOCOL_VERSION));
 
         //
@@ -4588,13 +4713,13 @@ void static LitecoinMiner(CWallet *pwallet)
         //
         int64 nStart = GetTime();
         uint256 hashTarget = CBigNum().SetCompact(pblock->nBits).getuint256();
-        loop
+        while (true)
         {
             unsigned int nHashesDone = 0;
 
             uint256 thash;
             char scratchpad[SCRYPT_SCRATCHPAD_SIZE];
-            loop
+            while (true)
             {
                 scrypt_1024_1_1_256_sp(BEGIN(pblock->nVersion), BEGIN(thash), scratchpad);
 
@@ -4665,7 +4790,7 @@ void static LitecoinMiner(CWallet *pwallet)
     } }
     catch (boost::thread_interrupted)
     {
-        printf("LitecoinMiner terminated\n");
+        printf("ProspercoinMiner terminated\n");
         throw;
     }
 }
