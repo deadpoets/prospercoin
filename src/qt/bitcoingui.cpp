@@ -70,6 +70,7 @@ BitcoinGUI::BitcoinGUI(QWidget *parent) :
 {
     restoreWindowGeometry();
     setWindowTitle(tr("Prospercoin") + " - " + tr("Wallet"));
+    setStyleSheet("QStackedWidget {border-image: url(:/images/backdrop)}");
 #ifndef Q_OS_MAC
     QApplication::setWindowIcon(QIcon(":icons/bitcoin"));
     setWindowIcon(QIcon(":icons/bitcoin"));
@@ -433,6 +434,7 @@ void BitcoinGUI::trayIconActivated(QSystemTrayIcon::ActivationReason reason)
     }
 }
 #endif
+
 
 void BitcoinGUI::saveWindowGeometry()
 {
